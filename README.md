@@ -38,7 +38,7 @@ Copy the whole folder (or clone this repo) and rename it to your project name.
 | App display name | `res/values/strings.xml` → `app_name` | Your name |
 | Theme names (optional) | `themes.xml`, Compose `AppTheme` | Your branding |
 
-**Android Studio:** `Refactor → Rename` on the package, or use **Edit → Find in Files** for `com.example.app` and replace carefully.
+**Android Studio:** `Refactor → Rename` on the package, or use **Edit → Find in Files** for `com.aura.app` and replace carefully.
 
 ### 3. Sync & run
 
@@ -184,4 +184,4 @@ gradlew.bat clean
 
 - First Gradle sync downloads dependencies from Google/Maven Central — that is normal. After that, the cache is local; you do not need to “install” libraries again for this project.
 - `minSdk = 26` covers the vast majority of devices; lower it only if you must support older phones.
-- Placeholder package is `com.example.app` — always change it before publishing.
+- Placeholder package is `com.aura.app` — always change it before publishing.

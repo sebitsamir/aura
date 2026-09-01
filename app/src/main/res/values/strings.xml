@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Android Template</string>
-    <string name="home_title">Ready to build</string>
-    <string name="home_subtitle">Rename the package, set your app name, and start adding features. See README.md for the full checklist.</string>
+    <string name="app_name">Aura</string>
 </resources>
