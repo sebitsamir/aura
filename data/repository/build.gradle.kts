@@ -20,6 +20,8 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:playback"))
     implementation(project(":domain:playback"))
+    implementation(project(":core:database"))
+    implementation(project(":core:scanner"))
 
     implementation(libs.media3.session)
     implementation(libs.androidx.concurrent.futures.ktx)
