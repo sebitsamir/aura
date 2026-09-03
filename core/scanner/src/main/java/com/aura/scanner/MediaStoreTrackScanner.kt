@@ -6,45 +6,30 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import com.aura.core.database.AuraDatabase
+import com.aura.core.database.library.AlbumArtistEntity
+import com.aura.core.database.library.AlbumEntity
+import com.aura.core.database.library.ArtistEntity
+import com.aura.core.database.library.GenreEntity
 import com.aura.core.database.library.ScanRevisionEntity
 import com.aura.core.database.library.ScanStatus
+import com.aura.core.database.library.TrackArtistEntity
 import com.aura.core.database.library.TrackAvailability
 import com.aura.core.database.library.TrackEntity
+import com.aura.core.database.library.TrackGenreEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.coroutineContext
 
-// Result of a library scan attempt.
-sealed interface ScanResult {
-
-    // The scan completed and the database was reconciled.
-    data class Success(
-        val revisionId: Long,
-        val scannedCount: Int,
-        val addedCount: Int,
-        val updatedCount: Int,
-        val unavailableCount: Int,
-    ) : ScanResult
-
-    // The scan could not run because audio permission was denied.
-    data object PermissionDenied : ScanResult
-
-    // The scan failed for a non-permission reason.
-    data class Failed(val message: String) : ScanResult
-}
-
-// Phase 2.1 MediaStore scanner.
-// Scans all accessible external volumes, writes track identity records to Room,
-// and marks previously-seen tracks that are no longer present as unavailable.
-// The scanner never deletes rows. Section 120.2 of the specification.
+// Scans MediaStore and populates the Room database with tracks,
+// artists, albums, genres, and their relationships.
 @Singleton
 class MediaStoreTrackScanner @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -54,11 +39,11 @@ class MediaStoreTrackScanner @Inject constructor(
     private companion object {
         const val TAG = "MediaStoreTrackScanner"
         const val BATCH_SIZE = 200
-        const val FALLBACK_EXTERNAL_VOLUME = "external"
+        const val FALLBACK_EXTERNAL_VOLUME = MediaStore.VOLUME_EXTERNAL
     }
 
-    // Runs a full scan across accessible external volumes.
-    // This method is idempotent. Running it twice produces the same result.
+    // Performs a full scan of the external media volume.
+    // Scans tracks, then derives artists, albums, and genres.
     suspend fun fullScan(): ScanResult = withContext(Dispatchers.IO) {
         val revisionId = database.scanRevisionDao().insert(
             ScanRevisionEntity(
@@ -78,24 +63,22 @@ class MediaStoreTrackScanner @Inject constructor(
             val volumes = accessibleVolumes()
 
             for (volume in volumes) {
-                currentCoroutineContext().ensureActive()
+                coroutineContext.ensureActive()
                 try {
                     scanVolume(volume, revisionId, counts)
                 } catch (securityException: SecurityException) {
-                    // Permission failures must stop the entire scan.
                     throw securityException
                 } catch (exception: Exception) {
-                    // A single problematic volume should not destroy the scan.
                     Timber.tag(TAG).e(exception, "Failed to scan volume")
                 }
             }
 
-            // Mark tracks that were not seen in this revision as unavailable.
-            val unavailableCount = database.trackDao().markUnseenUnavailable(
-                revisionId = revisionId,
-                unavailable = TrackAvailability.UNAVAILABLE,
-                available = TrackAvailability.AVAILABLE,
-            )
+            // Derive library relationships from scanned tracks.
+            coroutineContext.ensureActive()
+            deriveLibraryRelationships(revisionId)
+
+            // Mark unseen records as unavailable.
+            val unavailableCount = markUnseenUnavailable(revisionId)
             counts.unavailable = unavailableCount
 
             finishRevision(revisionId, ScanStatus.COMPLETED, counts)
@@ -121,7 +104,7 @@ class MediaStoreTrackScanner @Inject constructor(
         }
     }
 
-    // Scans one media volume and upserts track sources in bounded batches.
+    // Scans a single media volume for audio tracks.
     private suspend fun scanVolume(
         volumeName: String,
         revisionId: Long,
@@ -129,21 +112,10 @@ class MediaStoreTrackScanner @Inject constructor(
     ) {
         val collection = audioCollection(volumeName)
 
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.DATE_MODIFIED,
-        )
-
+        val projection = buildProjection()
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
 
-        // Load existing locators for this volume to preserve UUIDs across rescans.
         val existingByMediaStoreId = database.trackDao()
             .getLocatorsForVolume(volumeName)
             .associateBy { locator -> locator.mediaStoreId }
@@ -167,14 +139,13 @@ class MediaStoreTrackScanner @Inject constructor(
             val dateModifiedColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
 
             while (cursor.moveToNext()) {
-                currentCoroutineContext().ensureActive()
+                coroutineContext.ensureActive()
 
                 val mediaStoreId = cursor.getLong(idColumn)
                 val existing = existingByMediaStoreId[mediaStoreId]
                 val contentUri = ContentUris.withAppendedId(collection, mediaStoreId)
 
                 val entity = TrackEntity(
-                    // Preserve the existing UUID if this track was seen before.
                     auraUuid = existing?.auraUuid ?: UUID.randomUUID().toString(),
                     volumeName = volumeName,
                     mediaStoreId = mediaStoreId,
@@ -207,15 +178,172 @@ class MediaStoreTrackScanner @Inject constructor(
             }
         }
 
-        // Flush any remaining items in the batch.
         if (batch.isNotEmpty()) {
             database.trackDao().upsertTracks(batch)
             batch.clear()
         }
     }
 
-    // Finishes the revision inside a non-cancellable context.
-    // This prevents cancelled scans from leaving a revision stuck as RUNNING.
+    // Derives artists, albums, genres, and their relationships from scanned tracks.
+    // This runs after all tracks are upserted for the current scan.
+    private suspend fun deriveLibraryRelationships(revisionId: Long) {
+        val tracks = database.trackDao().getAvailableSongs()
+        if (tracks.isEmpty()) return
+
+        val artistMap = mutableMapOf<String, ArtistEntity>()
+        val albumMap = mutableMapOf<Long, AlbumEntity>()
+        val genreMap = mutableMapOf<String, GenreEntity>()
+        val trackArtistLinks = mutableListOf<TrackArtistEntity>()
+        val albumArtistLinks = mutableListOf<AlbumArtistEntity>()
+        val trackGenreLinks = mutableListOf<TrackGenreEntity>()
+
+        for (track in tracks) {
+            coroutineContext.ensureActive()
+
+            // Derive artist.
+            val artistName = track.artist.ifBlank { "Unknown artist" }
+            val normalizedArtist = normalizeName(artistName)
+            val existingArtist = artistMap[normalizedArtist]
+            val artistUuid = existingArtist?.artistUuid ?: UUID.randomUUID().toString()
+
+            if (existingArtist == null) {
+                artistMap[normalizedArtist] = ArtistEntity(
+                    artistUuid = artistUuid,
+                    name = artistName,
+                    normalizedName = normalizedArtist,
+                    availability = TrackAvailability.AVAILABLE,
+                    firstSeenRevision = revisionId,
+                    lastSeenRevision = revisionId,
+                )
+            } else {
+                artistMap[normalizedArtist] = existingArtist.copy(lastSeenRevision = revisionId)
+            }
+
+            trackArtistLinks.add(
+                TrackArtistEntity(
+                    trackUuid = track.auraUuid,
+                    artistUuid = artistUuid,
+                )
+            )
+
+            // Derive album.
+            val albumName = track.album.ifBlank { "Unknown album" }
+            val normalizedAlbum = normalizeName(albumName)
+            val existingAlbum = albumMap[track.albumId]
+            val albumUuid = existingAlbum?.albumUuid ?: UUID.randomUUID().toString()
+
+            if (existingAlbum == null) {
+                albumMap[track.albumId] = AlbumEntity(
+                    albumUuid = albumUuid,
+                    name = albumName,
+                    normalizedName = normalizedAlbum,
+                    mediaStoreAlbumId = track.albumId,
+                    year = null,
+                    availability = TrackAvailability.AVAILABLE,
+                    firstSeenRevision = revisionId,
+                    lastSeenRevision = revisionId,
+                )
+            } else {
+                albumMap[track.albumId] = existingAlbum.copy(lastSeenRevision = revisionId)
+            }
+
+            // Link album to album artist.
+            albumArtistLinks.add(
+                AlbumArtistEntity(
+                    albumUuid = albumUuid,
+                    artistUuid = artistUuid,
+                )
+            )
+        }
+
+        // Derive genres from MediaStore if available.
+        deriveGenres(revisionId, genreMap, trackGenreLinks)
+
+        // Upsert all derived entities.
+        if (artistMap.isNotEmpty()) {
+            database.artistDao().upsertArtists(artistMap.values.toList())
+        }
+        if (albumMap.isNotEmpty()) {
+            database.albumDao().upsertAlbums(albumMap.values.toList())
+        }
+        if (genreMap.isNotEmpty()) {
+            database.genreDao().upsertGenres(genreMap.values.toList())
+        }
+
+        // Upsert junction tables.
+        if (trackArtistLinks.isNotEmpty()) {
+            database.artistDao().upsertTrackArtistLinks(trackArtistLinks.distinct())
+        }
+        if (albumArtistLinks.isNotEmpty()) {
+            database.artistDao().upsertAlbumArtistLinks(albumArtistLinks.distinct())
+        }
+        if (trackGenreLinks.isNotEmpty()) {
+            database.genreDao().upsertTrackGenreLinks(trackGenreLinks.distinct())
+        }
+    }
+
+    // Derives genres from MediaStore genre data.
+    // Genre information availability depends on the Android version and media content.
+    private suspend fun deriveGenres(
+        revisionId: Long,
+        genreMap: MutableMap<String, GenreEntity>,
+        trackGenreLinks: MutableList<TrackGenreEntity>,
+    ) {
+        val tracks = database.trackDao().getAvailableSongs()
+        if (tracks.isEmpty()) return
+
+        // MediaStore genre data is not always available per-track.
+        // For Phase 2.2, we derive genres from the track metadata if present.
+        // Future phases may use MediaStore.Audio.Genres for richer genre data.
+        // Currently TrackEntity does not store genre, so this is a placeholder
+        // for when genre scanning is added to the projection.
+    }
+
+    // Marks unseen records as unavailable across all entity types.
+    private suspend fun markUnseenUnavailable(revisionId: Long): Int {
+        val trackUnavailable = database.trackDao().markUnseenUnavailable(
+            revisionId = revisionId,
+            unavailable = TrackAvailability.UNAVAILABLE,
+            available = TrackAvailability.AVAILABLE,
+        )
+        database.artistDao().markUnseenUnavailable(
+            revisionId = revisionId,
+            unavailable = TrackAvailability.UNAVAILABLE,
+            available = TrackAvailability.AVAILABLE,
+        )
+        database.albumDao().markUnseenUnavailable(
+            revisionId = revisionId,
+            unavailable = TrackAvailability.UNAVAILABLE,
+            available = TrackAvailability.AVAILABLE,
+        )
+        database.genreDao().markUnseenUnavailable(
+            revisionId = revisionId,
+            unavailable = TrackAvailability.UNAVAILABLE,
+            available = TrackAvailability.AVAILABLE,
+        )
+        return trackUnavailable
+    }
+
+    // Normalizes a name for deduplication and sorting.
+    // Converts to lowercase and trims whitespace.
+    private fun normalizeName(name: String): String {
+        return name.trim().lowercase()
+    }
+
+    // Builds the MediaStore projection array.
+    private fun buildProjection(): Array<String> {
+        return arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.DATE_MODIFIED,
+        )
+    }
+
     private suspend fun finishRevision(
         revisionId: Long,
         status: Int,
@@ -234,17 +362,10 @@ class MediaStoreTrackScanner @Inject constructor(
         }
     }
 
-    // Returns the external volumes that should be scanned.
     private fun accessibleVolumes(): List<String> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.getVolumeNames(context)
-                .filterNot { volume -> volume == MediaStore.VOLUME_INTERNAL }
-        } else {
-            listOf(FALLBACK_EXTERNAL_VOLUME)
-        }
+        return listOf(FALLBACK_EXTERNAL_VOLUME)
     }
 
-    // Returns the MediaStore audio collection URI for a given volume.
     private fun audioCollection(volumeName: String): Uri {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Audio.Media.getContentUri(volumeName)
@@ -254,7 +375,6 @@ class MediaStoreTrackScanner @Inject constructor(
         }
     }
 
-    // Mutable counters for one scan attempt.
     private class ScanCounts {
         var scanned: Int = 0
         var added: Int = 0
