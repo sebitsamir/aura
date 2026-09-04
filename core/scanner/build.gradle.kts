@@ -19,12 +19,13 @@ android {
 }
 
 dependencies {
-    implementation(project(":core:database"))
     implementation(project(":core:common"))
-
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.timber)
+    implementation(project(":core:database"))
+    implementation(project(":core:model")) // Required for ScanProgress, ScanPhase, and Folder
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.timber)
 }

@@ -1,5 +1,6 @@
 package com.aura.core.database.library
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -22,6 +23,7 @@ object TrackAvailability {
         Index(value = ["title"]),
         Index(value = ["artist"]),
         Index(value = ["album"]),
+        Index(value = ["folderPath"]),
     ],
 )
 data class TrackEntity(
@@ -34,6 +36,8 @@ data class TrackEntity(
     val artist: String,
     val album: String,
     val albumId: Long,
+    @ColumnInfo(defaultValue = "")
+    val folderPath: String,
     val durationMs: Long,
     val sizeBytes: Long,
     val dateModified: Long,

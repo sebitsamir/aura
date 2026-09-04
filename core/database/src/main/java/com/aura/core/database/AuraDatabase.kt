@@ -8,6 +8,8 @@ import com.aura.core.database.library.AlbumDao
 import com.aura.core.database.library.AlbumEntity
 import com.aura.core.database.library.ArtistDao
 import com.aura.core.database.library.ArtistEntity
+import com.aura.core.database.library.FolderDao
+import com.aura.core.database.library.FolderEntity
 import com.aura.core.database.library.GenreDao
 import com.aura.core.database.library.GenreEntity
 import com.aura.core.database.library.ScanRevisionDao
@@ -31,12 +33,14 @@ import com.aura.core.database.library.TrackGenreEntity
         TrackArtistEntity::class,
         AlbumArtistEntity::class,
         TrackGenreEntity::class,
+        FolderEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
+        AutoMigration(from = 3, to = 4),
     ],
 )
 abstract class AuraDatabase : RoomDatabase() {
@@ -50,4 +54,7 @@ abstract class AuraDatabase : RoomDatabase() {
     abstract fun albumDao(): AlbumDao
 
     abstract fun genreDao(): GenreDao
+
+    abstract fun folderDao(): FolderDao
+
 }

@@ -4,34 +4,28 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 
-// A lightweight projection used during scan reconciliation.
-// The scanner uses this to preserve durable AURA UUIDs across rescans
-// without loading full entity rows.
 data class TrackLocator(
     val mediaStoreId: Long,
     val auraUuid: String,
     val firstSeenRevision: Long,
+    val dateModified: Long,
 )
 
-// Data access object for scanned track sources.
 @Dao
 interface TrackDao {
 
-    // Inserts or updates a batch of scanned tracks.
     @Upsert
     suspend fun upsertTracks(tracks: List<TrackEntity>)
 
-    // Returns only identity fields for reconciliation within a volume.
     @Query(
         """
-        SELECT mediaStoreId, auraUuid, firstSeenRevision
+        SELECT mediaStoreId, auraUuid, firstSeenRevision, dateModified
         FROM track_sources
         WHERE volumeName = :volumeName
         """
     )
     suspend fun getLocatorsForVolume(volumeName: String): List<TrackLocator>
 
-    // Returns all available tracks sorted by title for the library song list.
     @Query(
         """
         SELECT *
@@ -42,8 +36,6 @@ interface TrackDao {
     )
     suspend fun getAvailableSongs(): List<TrackEntity>
 
-    // Returns available tracks matching a set of MediaStore IDs.
-    // Used by playback recovery to validate queue identities.
     @Query(
         """
         SELECT *
@@ -54,12 +46,9 @@ interface TrackDao {
     )
     suspend fun getAvailableByMediaStoreIds(mediaStoreIds: List<Long>): List<TrackEntity>
 
-    // Returns the count of available tracks.
     @Query("SELECT COUNT(*) FROM track_sources WHERE availability = 0")
     suspend fun availableTrackCount(): Int
 
-    // Marks tracks not seen in the current revision as unavailable.
-    // This never deletes rows. Section 120.2 of the specification.
     @Query(
         """
         UPDATE track_sources
@@ -73,4 +62,36 @@ interface TrackDao {
         unavailable: Int,
         available: Int,
     ): Int
+
+    // Updates lastSeenRevision for tracks that have not changed.
+    // Used during incremental scanning to avoid full metadata extraction.
+    @Query(
+        """
+        UPDATE track_sources
+        SET lastSeenRevision = :revisionId
+        WHERE volumeName = :volumeName
+        AND mediaStoreId IN (:mediaStoreIds)
+        """
+    )
+    suspend fun updateLastSeenRevision(
+        volumeName: String,
+        mediaStoreIds: List<Long>,
+        revisionId: Long,
+    )
+
+    // Marks specific tracks as unavailable by their MediaStore IDs.
+    // Used during incremental scanning for files that no longer exist.
+    @Query(
+        """
+        UPDATE track_sources
+        SET availability = :unavailable
+        WHERE volumeName = :volumeName
+        AND mediaStoreId IN (:mediaStoreIds)
+        """
+    )
+    suspend fun markTracksUnavailable(
+        volumeName: String,
+        mediaStoreIds: List<Long>,
+        unavailable: Int,
+    )
 }

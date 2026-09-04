@@ -2,6 +2,7 @@ package com.aura.domain.playback
 
 import com.aura.core.model.Album
 import com.aura.core.model.Artist
+import com.aura.core.model.Folder
 import com.aura.core.model.Genre
 import com.aura.core.model.Song
 import com.aura.core.playback.PlaybackCommand
@@ -22,12 +23,16 @@ interface LibraryRepository {
 
     suspend fun getGenres(): List<Genre>
 
+    suspend fun getFolders(): List<Folder>
+
     suspend fun getSongsByAlbum(mediaStoreAlbumId: Long): List<Song>
 
     suspend fun getSongsByArtist(artistUuid: String): List<Song>
 
     suspend fun getSongsByGenre(genreUuid: String): List<Song>
 
+    suspend fun getSongsByFolder(folderPath: String): List<Song>
+    
     suspend fun getAlbumsByArtist(artistUuid: String): List<Album>
 }
 
