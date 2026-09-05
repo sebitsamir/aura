@@ -31,7 +31,7 @@ import javax.inject.Singleton
 
 @Singleton
 class PlaybackRepositoryImpl @Inject constructor(
-    @ApplicationContext private val context: Context,
+   @ApplicationContext private val context: Context,
 ) : PlaybackRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

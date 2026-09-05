@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.aura.core.model.AuraAppearance
 import com.aura.core.model.PlaybackSnapshot
 import com.aura.core.model.RepeatMode
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,7 +19,9 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "aura_preferences")
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "aura_preferences",
+)
 
 @Singleton
 class UserPreferencesRepository @Inject constructor(
@@ -27,17 +30,85 @@ class UserPreferencesRepository @Inject constructor(
     private val dataStore = context.dataStore
 
     private companion object {
-        val IS_DARK_MODE_ENABLED = booleanPreferencesKey("is_dark_mode_enabled")
+        val APPEARANCE = stringPreferencesKey("appearance")
+
+        /**
+         * Kept only so installs created before the multi-appearance system
+         * can be migrated without silently losing the user's preference.
+         */
+        val LEGACY_IS_DARK_MODE_ENABLED =
+            booleanPreferencesKey("is_dark_mode_enabled")
     }
 
-    val isDarkModeEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
-        preferences[IS_DARK_MODE_ENABLED] ?: true
-    }
+    /**
+     * AURA's persisted appearance.
+     *
+     * Migration rules:
+     *
+     * 1. New "appearance" preference wins.
+     * 2. Old Boolean dark-mode preference is mapped to Obsidian/Ivory.
+     * 3. Fresh installs default to Obsidian, AURA's primary appearance.
+     */
+    val appearance: Flow<AuraAppearance> = dataStore.data.map { preferences ->
+        val storedAppearance = preferences[APPEARANCE]
 
-    suspend fun setDarkModeEnabled(enabled: Boolean) {
-        dataStore.edit { preferences ->
-            preferences[IS_DARK_MODE_ENABLED] = enabled
+        if (storedAppearance != null) {
+            AuraAppearance.fromStoredValue(storedAppearance)
+        } else {
+            when (preferences[LEGACY_IS_DARK_MODE_ENABLED]) {
+                true -> AuraAppearance.OBSIDIAN
+                false -> AuraAppearance.IVORY
+                null -> AuraAppearance.OBSIDIAN
+            }
         }
+    }
+
+    suspend fun setAppearance(appearance: AuraAppearance) {
+        dataStore.edit { preferences ->
+            preferences[APPEARANCE] = appearance.name
+
+            // Once the new preference is persisted, the legacy Boolean
+            // should no longer be authoritative.
+            preferences.remove(LEGACY_IS_DARK_MODE_ENABLED)
+        }
+    }
+
+    /**
+     * Compatibility API for any code that still expects the old Boolean.
+     *
+     * New code should use [appearance].
+     */
+    @Deprecated(
+        message = "Use appearance instead.",
+        replaceWith = ReplaceWith("appearance"),
+    )
+    val isDarkModeEnabled: Flow<Boolean> = appearance.map { current ->
+        when (current) {
+            AuraAppearance.IVORY -> false
+            AuraAppearance.SYSTEM -> true
+            AuraAppearance.OBSIDIAN,
+            AuraAppearance.AMOLED,
+            AuraAppearance.ATMOSPHERE -> true
+        }
+    }
+
+    /**
+     * Compatibility API for callers using the old dark-mode setter.
+     */
+    @Deprecated(
+        message = "Use setAppearance instead.",
+        replaceWith = ReplaceWith(
+            "setAppearance(if (enabled) AuraAppearance.OBSIDIAN else AuraAppearance.IVORY)",
+        ),
+    )
+    suspend fun setDarkModeEnabled(enabled: Boolean) {
+        setAppearance(
+            if (enabled) {
+                AuraAppearance.OBSIDIAN
+            } else {
+                AuraAppearance.IVORY
+            },
+        )
     }
 }
 
@@ -73,16 +144,37 @@ class PlaybackRecoveryStore @Inject constructor(
 
     suspend fun load(): PlaybackSnapshot? {
         val preferences = dataStore.data.first()
+
         val songIdsRaw = preferences[SONG_IDS] ?: return null
-        if (songIdsRaw.isBlank()) return null
+
+        if (songIdsRaw.isBlank()) {
+            return null
+        }
+
+        val songIds = songIdsRaw
+            .split(",")
+            .mapNotNull { rawId ->
+                rawId.toLongOrNull()
+            }
+
+        if (songIds.isEmpty()) {
+            return null
+        }
+
+        val repeatMode = preferences[REPEAT_MODE]
+            ?.let { storedMode ->
+                runCatching {
+                    RepeatMode.valueOf(storedMode)
+                }.getOrNull()
+            }
+            ?: RepeatMode.OFF
 
         return PlaybackSnapshot(
-            songIds = songIdsRaw.split(",").mapNotNull { it.toLongOrNull() },
+            songIds = songIds,
             currentIndex = preferences[CURRENT_INDEX] ?: 0,
             positionMs = preferences[POSITION_MS] ?: 0L,
             queueRevision = preferences[QUEUE_REVISION] ?: 0,
-            repeatMode = preferences[REPEAT_MODE]?.let { runCatching { RepeatMode.valueOf(it) }.getOrNull() }
-                ?: RepeatMode.OFF,
+            repeatMode = repeatMode,
             shuffleEnabled = preferences[SHUFFLE_ENABLED] ?: false,
             wasPlaying = preferences[WAS_PLAYING] ?: false,
             timestampMs = preferences[TIMESTAMP_MS] ?: 0L,
