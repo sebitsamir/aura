@@ -1,187 +1,223 @@
-# Android Template
+# Aura
 
-A clean, production-ready **Kotlin + Jetpack Compose** starter you can copy for every new Android app — simple or advanced.
+**A native Android music player engineered around a modular, local-first media architecture.**
 
-Stack is already wired: **Compose Material 3**, **Navigation**, **Hilt**, **Room**, **DataStore**, **Retrofit + OkHttp**, **Coil**, **Coroutines**, **Timber**, **Splash Screen**, release **R8/ProGuard**, and a version catalog for optional libraries (Paging, WorkManager, Moshi, LeakCanary).
+Aura is an Android music application built with **Kotlin and Jetpack Compose**.
 
----
+Rather than concentrating playback, media scanning, database access, UI, and feature state inside one application module, Aura is structured as a multi-module product with dedicated core, data, domain, feature, and service layers.
+
+> **Status:** active development.
+
+## Product direction
+
+Aura is being built as a refined personal music experience with an emphasis on:
+
+- responsive native playback,
+- local media discovery,
+- clean library organization,
+- albums and artists,
+- playlists,
+- queue control,
+- lyrics,
+- search,
+- listening statistics,
+- a dedicated player experience,
+- maintainable Android architecture.
+
+## Architecture
+
+Aura is intentionally modular.
+
+```text
+app
+ │
+ ├── core
+ │    ├── common
+ │    ├── database
+ │    ├── datastore
+ │    ├── designsystem
+ │    ├── model
+ │    ├── media
+ │    ├── network
+ │    ├── permissions
+ │    ├── playback
+ │    ├── scanner
+ │    ├── analytics
+ │    └── utilities
+ │
+ ├── data
+ │    └── repository
+ │
+ ├── domain
+ │    └── playback
+ │
+ ├── feature
+ │    ├── home
+ │    ├── library
+ │    ├── songs
+ │    ├── albums
+ │    ├── artists
+ │    ├── playlists
+ │    ├── search
+ │    ├── player
+ │    ├── queue
+ │    ├── lyrics
+ │    ├── flow
+ │    ├── statistics
+ │    └── settings
+ │
+ └── service
+      └── playback
+```
+
+This keeps feature UI separate from lower-level playback, persistence, media scanning, and shared infrastructure.
+
+## Key engineering areas
+
+### Native playback
+
+Aura uses AndroidX **Media3** components for playback/session infrastructure.
+
+### Media scanning
+
+A dedicated scanner module separates device-media discovery from presentation logic.
+
+### Playback service
+
+Playback is isolated in its own service module so audio state can outlive individual Compose screens.
+
+### Persistence
+
+Room provides structured local persistence.
+
+DataStore is available for lightweight user/application preferences.
+
+### Dependency injection
+
+Hilt provides dependency injection across modules.
+
+### Repository layer
+
+Data access is abstracted into repository modules instead of allowing feature screens to depend directly on persistence or media sources.
+
+### Compose UI
+
+Jetpack Compose and Material 3 provide the declarative UI layer.
+
+### Images
+
+Coil is used for image loading within the Compose application.
+
+### Concurrency
+
+Kotlin Coroutines and Flow support asynchronous work and reactive state propagation.
+
+## Technology stack
+
+### Language / UI
+
+- Kotlin
+- Jetpack Compose
+- Material 3
+
+### Architecture
+
+- Multi-module Android architecture
+- Hilt
+- ViewModel
+- Coroutines / Flow
+
+### Playback
+
+- AndroidX Media3
+- ExoPlayer
+- Media Session
+
+### Local data
+
+- Room
+- DataStore
+
+### Networking
+
+- Retrofit
+- OkHttp
+- Kotlin serialization / Moshi support
+
+### Images
+
+- Coil
+
+### Tooling
+
+- Gradle Kotlin DSL
+- Version Catalog
+- KSP
+- Timber
+- LeakCanary
+
 
 ## Requirements
 
-- Android Studio **Meerkat / Narwhal** or newer (AGP 9.x)
-- JDK **17+** (Android Studio’s bundled JBR is fine)
-- Android SDK with **API 36** installed
+The project currently targets a modern Android toolchain.
 
-On Windows, if CLI builds fail without `JAVA_HOME`, use:
+Recommended:
 
-```bat
-gw.bat assembleDebug
+- Android Studio with current AGP support
+- JDK 17+
+- Android SDK installed
+
+## Build
+
+Clone:
+
+```bash
+git clone https://github.com/sebitsamir/aura.git
+cd aura
 ```
 
-Or set `JAVA_HOME` to Android Studio’s JBR, or uncomment `org.gradle.java.home` in `gradle.properties`.
-
----
-
-## Quick start (new app from this template)
-
-### 1. Copy the template
-
-Copy the whole folder (or clone this repo) and rename it to your project name.
-
-### 2. Rename the project
-
-| What | Where | Change to |
-|------|--------|-----------|
-| Project name | `settings.gradle.kts` → `rootProject.name` | Your app name |
-| Namespace / applicationId | `app/build.gradle.kts` | `com.yourcompany.yourapp` |
-| Package folders | `app/src/.../com/example/app` | Match the new package |
-| App display name | `res/values/strings.xml` → `app_name` | Your name |
-| Theme names (optional) | `themes.xml`, Compose `AppTheme` | Your branding |
-
-**Android Studio:** `Refactor → Rename` on the package, or use **Edit → Find in Files** for `com.aura.app` and replace carefully.
-
-### 3. Sync & run
-
-1. Open the folder in Android Studio  
-2. Let Gradle sync finish (first sync downloads dependencies once)  
-3. Run on an emulator or device  
+On Windows:
 
 ```bat
 gradlew.bat assembleDebug
 ```
 
-### 4. Point networking at your API
+On macOS/Linux:
 
-In `di/AppModule.kt`, change:
-
-```kotlin
-val baseUrl = "https://api.example.com/"
+```bash
+./gradlew assembleDebug
 ```
 
-Then add interfaces under `data/remote/` and inject them with Hilt.
+Install/run from Android Studio for normal development.
 
----
+## Why the modular structure matters
 
-## What’s included
+A music player has unusually long-lived state.
 
-### Already enabled in `:app`
+Playback may continue while:
 
-| Area | Libraries |
-|------|-----------|
-| UI | Compose, Material 3, Icons Extended, Navigation (type-safe routes) |
-| Architecture | Hilt DI, ViewModel, Coroutines/Flow |
-| Local data | Room (+ KSP), DataStore Preferences |
-| Network | Retrofit, OkHttp logging, Kotlinx Serialization |
-| Images | Coil |
-| UX / quality | Splash Screen, Timber, LeakCanary (debug), R8 minify (release) |
+- the user navigates between screens,
+- the app moves to the background,
+- the device library changes,
+- metadata is refreshed,
+- queue state changes.
 
-### In the version catalog (ready to uncomment)
+Keeping playback, media scanning, persistence, and feature UI separated makes those flows easier to reason about and test than a single-module implementation.
 
-In `app/build.gradle.kts` (bottom of `dependencies`):
+## Current status
 
-- Paging 3  
-- WorkManager + Hilt Worker  
-- Moshi (if you prefer it over kotlinx.serialization)  
+Aura is **under active development**.
 
-Versions live in `gradle/libs.versions.toml` — update once, reuse everywhere.
+The repository already contains a substantial modular architecture, but the project should not yet be presented as a finished Play Store product unless a release build has actually been published.
 
----
+## README migration note
 
-## Suggested package layout
+Earlier versions of this repository were based on a reusable Android starter and the old README still described the repository as **“Android Template.”**
 
-```
-com.yourapp/
-├── App.kt                 # @HiltAndroidApp
-├── MainActivity.kt        # @AndroidEntryPoint
-├── di/                    # Hilt modules (network, DB, …)
-├── ui/
-│   ├── navigation/        # NavHost + routes
-│   ├── screens/           # Screen composables
-│   ├── components/        # Shared UI pieces (add as needed)
-│   └── theme/             # Color, Type, AppTheme
-├── data/
-│   ├── local/             # Room DB, DAOs, entities
-│   ├── remote/            # API + DTOs
-│   └── repository/        # Repository implementations
-└── domain/
-    ├── model/             # Domain models
-    └── usecase/           # Optional use cases for complex apps
-```
+Aura is now the product. This README replaces that obsolete project identity.
 
-**Simple apps:** ViewModel → Repository → Room/API is enough.  
-**Advanced apps:** add use cases, feature modules, and stricter domain boundaries.
+## Author
 
----
+**Sebit Samir**
 
-## Tips for any kind of project
-
-### Simple UI-only app
-- Keep `HomeScreen` / add a few screens in `ui/screens`
-- You can leave Room/Retrofit unused; they don’t hurt until you call them
-- Or comment out unused `implementation` lines in `app/build.gradle.kts` to slim the APK
-
-### App with local database
-1. Create entities + DAO under `data/local`
-2. Create `AppDatabase`
-3. Provide them in `DatabaseModule`
-4. Expose via a repository + ViewModel
-
-### App with API
-1. Define Retrofit interfaces in `data/remote`
-2. `@Provides` your API in `AppModule` (`retrofit.create(...)`)
-3. Map DTOs → domain models in the repository
-
-### Multi-module (larger / advanced)
-1. Keep `:app` as the thin shell (Application, NavHost, DI entry)
-2. Add modules in `settings.gradle.kts`, e.g. `:core:network`, `:feature:home`
-3. Root `build.gradle.kts` already declares `android.library` — apply it in new modules
-4. Share versions via `libs.versions.toml`
-
-### Branding
-- Update `ui/theme/Color.kt` and set `dynamicColor = false` in `AppTheme` if you want a fixed brand palette
-- Replace launcher icons (Image Asset Studio)
-- Change `splash_background` in `colors.xml`
-
-### Release / Play Store
-- Release builds already enable minify + shrink resources
-- Create a real keystore; never commit `.jks` / `keystore.properties`
-- Bump `versionCode` / `versionName` in `app/build.gradle.kts`
-- Fill `backup_rules.xml` / `data_extraction_rules.xml` before shipping
-
-### Stability habits
-- Prefer catalog aliases (`libs....`) over hard-coded coordinates
-- Bump the Compose **BOM** together; don’t pin Compose artifacts individually
-- Keep KSP version aligned with Kotlin (`ksp` in the catalog)
-- After renaming packages, **Clean Project** then rebuild
-- Treat `local.properties` as machine-local (already gitignored)
-
----
-
-## First-build checklist
-
-- [ ] Renamed `rootProject.name`, `namespace`, `applicationId`
-- [ ] Renamed Kotlin package folders
-- [ ] Updated `app_name` and launcher icons
-- [ ] Set Retrofit `baseUrl` (or remove network wiring if unused)
-- [ ] Synced Gradle and ran `assembleDebug`
-- [ ] (Optional) Initialized git: `git init` then first commit
-
----
-
-## Useful Gradle commands
-
-```bat
-gradlew.bat assembleDebug
-gradlew.bat assembleRelease
-gradlew.bat test
-gradlew.bat lint
-gradlew.bat clean
-```
-
----
-
-## Notes
-
-- First Gradle sync downloads dependencies from Google/Maven Central — that is normal. After that, the cache is local; you do not need to “install” libraries again for this project.
-- `minSdk = 26` covers the vast majority of devices; lower it only if you must support older phones.
-- Placeholder package is `com.aura.app` — always change it before publishing.
+GitHub: [@sebitsamir](https://github.com/sebitsamir)
