@@ -1,6 +1,8 @@
 ﻿package com.aura.app.navigation
 
 import android.net.Uri
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -8,10 +10,13 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -20,9 +25,11 @@ import com.aura.core.designsystem.components.AuraBottomNavigation
 import com.aura.core.designsystem.components.AuraBottomNavItem
 import com.aura.core.designsystem.components.AuraMiniPlayer
 import com.aura.core.designsystem.components.AuraScaffold
+import com.aura.core.designsystem.theme.AuraColors
+import com.aura.core.designsystem.theme.AuraTypography
 import com.aura.core.playback.PlaybackCommand
 import com.aura.domain.playback.PlaybackRepository
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aura.feature.player.PlayerRoute
 import kotlinx.coroutines.launch
 
 @Composable
@@ -46,7 +53,7 @@ fun AuraNavHost(
         modifier = modifier,
         bottomBar = {
             if (isTopLevelRoute) {
-                androidx.compose.foundation.layout.Column {
+                Column {
                     if (playbackState.currentSong != null) {
                         AuraMiniPlayer(
                             title = playbackState.currentSong?.title ?: "",
@@ -100,19 +107,20 @@ fun AuraNavHost(
             startDestination = AuraNavigationRoute.Home,
             modifier = Modifier.padding(paddingValues)
         ) {
-            composable<AuraNavigationRoute.Home> { PlaceholderScreen("Home") }
-            composable<AuraNavigationRoute.Library> { PlaceholderScreen("Library") }
+            // PlayerRoute owns the permission launcher and library loading.
+            composable<AuraNavigationRoute.Home> { PlayerRoute() }
+            composable<AuraNavigationRoute.Library> { PlayerRoute() }
             composable<AuraNavigationRoute.Search> { PlaceholderScreen("Search") }
             composable<AuraNavigationRoute.Settings> { PlaceholderScreen("Settings") }
-            composable<AuraNavigationRoute.Player> {
-                // Re-use existing PlayerScreen route logic if needed, or placeholder
-                PlaceholderScreen("Now Playing")
-            }
+            composable<AuraNavigationRoute.Player> { PlayerRoute() }
         }
     }
 }
 
-private fun navigateToTopLevel(navController: androidx.navigation.NavController, route: AuraNavigationRoute) {
+private fun navigateToTopLevel(
+    navController: androidx.navigation.NavController,
+    route: AuraNavigationRoute
+) {
     navController.navigate(route) {
         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true
@@ -122,14 +130,14 @@ private fun navigateToTopLevel(navController: androidx.navigation.NavController,
 
 @Composable
 private fun PlaceholderScreen(name: String) {
-    androidx.compose.foundation.layout.Box(
+    Box(
         modifier = Modifier.fillMaxSize(),
-        contentAlignment = androidx.compose.ui.Alignment.Center
+        contentAlignment = Alignment.Center
     ) {
-        androidx.compose.material3.Text(
-            text = "$name (Stage 3.1 Shell)",
-            style = com.aura.core.designsystem.theme.AuraTypography.headline,
-            color = com.aura.core.designsystem.theme.AuraColors.textPrimary
+        Text(
+            text = "$name (Coming in Stage 3.2+)",
+            style = AuraTypography.headline,
+            color = AuraColors.textPrimary
         )
     }
 }
