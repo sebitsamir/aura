@@ -1,11 +1,9 @@
-﻿package com.aura.core.database.di
+package com.aura.core.database.di
 
 import android.content.Context
 import androidx.room.Room
 import com.aura.core.database.AuraDatabase
-import com.aura.core.database.MIGRATION_3_4
 import com.aura.core.database.MIGRATION_4_5
-import com.aura.core.database.library.FolderDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,7 +23,7 @@ object DatabaseModule {
             AuraDatabase::class.java,
             "aura_database"
         )
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_4_5)
             .build()
     }
 

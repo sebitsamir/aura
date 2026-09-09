@@ -1,5 +1,11 @@
 package com.aura.app.navigation
 
-sealed class AuraNavigationRoute(val route: String) {
-    data object Player : AuraNavigationRoute("player")
+import kotlinx.serialization.Serializable
+
+sealed interface AuraNavigationRoute {
+    @Serializable data object Home : AuraNavigationRoute
+    @Serializable data object Library : AuraNavigationRoute
+    @Serializable data object Search : AuraNavigationRoute
+    @Serializable data object Settings : AuraNavigationRoute
+    @Serializable data object Player : AuraNavigationRoute
 }

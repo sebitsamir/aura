@@ -29,6 +29,7 @@ class PlayerManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val localMusicDataSource: LocalMusicDataSource,
     private val recoveryStore: PlaybackRecoveryStore,
+    private val playbackEventRecorder: PlaybackEventRecorder,
 ) {
     private val scope =
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -54,14 +55,48 @@ class PlayerManager @Inject constructor(
         exoPlayer.addListener(
             object : Player.Listener {
 
-                override fun onIsPlayingChanged(
-                    isPlaying: Boolean,
-                ) = persistSnapshot(isPlaying)
-
                 override fun onMediaItemTransition(
                     mediaItem: MediaItem?,
                     reason: Int,
-                ) = persistSnapshot(exoPlayer.isPlaying)
+                ) {
+                    persistSnapshot(exoPlayer.isPlaying)
+                    mediaItem?.let {
+                        val songId = it.mediaId.toLongOrNull() ?: return
+                        playbackEventRecorder.onPlayerEvent(
+                            PlayerEvent.TrackChanged(
+                                trackUuid = songId.toString(),
+                                mediaStoreId = songId,
+                                durationMs = exoPlayer.duration.coerceAtLeast(0L),
+                                positionMs = exoPlayer.currentPosition,
+                                isPlaying = exoPlayer.isPlaying
+                            )
+                        )
+                    }
+                }
+
+                override fun onIsPlayingChanged(
+                    isPlaying: Boolean,
+                ) {
+                    persistSnapshot(isPlaying)
+                    playbackEventRecorder.onPlayerEvent(
+                        PlayerEvent.PlaybackStateChanged(
+                            isPlaying = isPlaying,
+                            positionMs = exoPlayer.currentPosition
+                        )
+                    )
+                }
+
+                override fun onPositionDiscontinuity(
+                    oldPosition: Player.PositionInfo,
+                    newPosition: Player.PositionInfo,
+                    reason: Int,
+                ) {
+                    if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                        playbackEventRecorder.onPlayerEvent(
+                            PlayerEvent.PositionDiscontinuity(newPosition.positionMs)
+                        )
+                    }
+                }
 
                 override fun onPlaybackStateChanged(
                     playbackState: Int,

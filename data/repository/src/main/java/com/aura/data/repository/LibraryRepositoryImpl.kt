@@ -174,6 +174,7 @@ class LibraryRepositoryImpl @Inject constructor(
         return Song(
             id = mediaStoreId,
             mediaStoreId = mediaStoreId,
+            auraUuid = auraUuid,
             title = title.ifBlank { "Unknown title" },
             artist = artist.ifBlank { "Unknown artist" },
             album = album.ifBlank { "Unknown album" },

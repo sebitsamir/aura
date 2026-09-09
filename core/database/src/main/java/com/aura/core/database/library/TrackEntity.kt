@@ -5,16 +5,11 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-// Availability states for scanned track sources.
-// UNAVAILABLE tracks are retained so user data is never destroyed
-// when a removable volume disappears temporarily.
 object TrackAvailability {
     const val AVAILABLE = 0
     const val UNAVAILABLE = 1
 }
 
-// The durable library identity record for one discovered audio source.
-// auraUuid is the stable AURA identity. MediaStore ID is a locator, not identity.
 @Entity(
     tableName = "track_sources",
     indices = [

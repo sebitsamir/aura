@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 4,
-    "identityHash": "c28b06c25783326681b0a28494bc55e0",
+    "version": 5,
+    "identityHash": "4db4c380baa4a9589c8976c87f3d0983",
     "entities": [
       {
         "tableName": "app_metadata",
@@ -625,6 +625,70 @@
         ]
       },
       {
+        "tableName": "folders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`folderUuid` TEXT NOT NULL, `path` TEXT NOT NULL, `name` TEXT NOT NULL, `parentPath` TEXT, `availability` INTEGER NOT NULL, `firstSeenRevision` INTEGER NOT NULL, `lastSeenRevision` INTEGER NOT NULL, PRIMARY KEY(`folderUuid`))",
+        "fields": [
+          {
+            "fieldPath": "folderUuid",
+            "columnName": "folderUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentPath",
+            "columnName": "parentPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "availability",
+            "columnName": "availability",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstSeenRevision",
+            "columnName": "firstSeenRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSeenRevision",
+            "columnName": "lastSeenRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "folderUuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_folders_path",
+            "unique": true,
+            "columnNames": [
+              "path"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_folders_path` ON `${TABLE_NAME}` (`path`)"
+          }
+        ]
+      },
+      {
         "tableName": "track_user_overlays",
         "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`trackUuid` TEXT NOT NULL, `isFavorite` INTEGER NOT NULL, `rating` INTEGER, `userTags` TEXT, `lastModified` INTEGER NOT NULL, PRIMARY KEY(`trackUuid`), FOREIGN KEY(`trackUuid`) REFERENCES `track_sources`(`auraUuid`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
@@ -785,7 +849,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c28b06c25783326681b0a28494bc55e0')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4db4c380baa4a9589c8976c87f3d0983')"
     ]
   }
 }

@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
@@ -66,6 +66,7 @@ dependencies {
     implementation(project(":core:permissions"))
     implementation(project(":data:repository"))
     implementation(project(":domain:playback"))
+    implementation(project(":core:playback"))
     implementation(project(":feature:player"))
     implementation(project(":service:playback"))
 
@@ -89,6 +90,7 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.timber)
+    implementation(libs.androidx.compose.material.icons.extended)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

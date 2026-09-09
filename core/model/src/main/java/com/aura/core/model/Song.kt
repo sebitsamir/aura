@@ -11,4 +11,5 @@ data class Song(
     val durationMs: Long,
     val contentUri: Uri,
     val albumId: Long = 0L,
+    val auraUuid: String = mediaStoreId.toString()
 )
