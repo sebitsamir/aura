@@ -12,7 +12,6 @@ import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import com.aura.core.designsystem.theme.AuraColors
 import com.aura.core.designsystem.theme.AuraShape
-import com.aura.core.designsystem.theme.AuraTypography
 
 // Cached artwork surface used by every screen.
 // Coil provides memory and disk caching, so large embedded covers
@@ -39,10 +38,9 @@ fun AuraArtwork(
                 modifier = Modifier.matchParentSize(),
             )
         } else {
-            androidx.compose.material3.Text(
-                text = "A",
-                style = AuraTypography.headline,
-                color = AuraColors.textMuted,
+            AuraBrandMark(
+                modifier = Modifier.matchParentSize(),
+                contentDescription = contentDescription,
             )
         }
     }

@@ -1,6 +1,5 @@
 ﻿package com.aura.app.navigation
 
-import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,20 +15,28 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aura.core.designsystem.components.AuraBottomNavigation
 import com.aura.core.designsystem.components.AuraBottomNavItem
 import com.aura.core.designsystem.components.AuraMiniPlayer
 import com.aura.core.designsystem.components.AuraScaffold
+import com.aura.core.designsystem.components.AuraIcons
 import com.aura.core.designsystem.theme.AuraColors
 import com.aura.core.designsystem.theme.AuraTypography
 import com.aura.core.playback.PlaybackCommand
 import com.aura.domain.playback.PlaybackRepository
+import com.aura.feature.flow.FlowRoute
+import com.aura.feature.home.HomeRoute
+import com.aura.feature.library.LibraryRoute
 import com.aura.feature.player.PlayerRoute
+import com.aura.feature.settings.SettingsRoute
 import kotlinx.coroutines.launch
 
 @Composable
@@ -41,13 +48,16 @@ fun AuraNavHost(
     val playbackState by playbackRepository.playbackState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
-    val currentRoute = navController.currentBackStackEntry?.destination?.route
-    val isTopLevelRoute = currentRoute in listOf(
-        AuraNavigationRoute.Home::class.qualifiedName,
-        AuraNavigationRoute.Library::class.qualifiedName,
-        AuraNavigationRoute.Search::class.qualifiedName,
-        AuraNavigationRoute.Settings::class.qualifiedName
-    )
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+
+    val isTopLevelRoute = currentDestination?.let { dest ->
+        dest.hasRoute<AuraNavigationRoute.Home>() ||
+        dest.hasRoute<AuraNavigationRoute.Library>() ||
+        dest.hasRoute<AuraNavigationRoute.Search>() ||
+        dest.hasRoute<AuraNavigationRoute.Flow>() ||
+        dest.hasRoute<AuraNavigationRoute.Settings>()
+    } ?: false
 
     AuraScaffold(
         modifier = modifier,
@@ -59,7 +69,7 @@ fun AuraNavHost(
                             title = playbackState.currentSong?.title ?: "",
                             artist = playbackState.currentSong?.artist ?: "",
                             artworkUri = playbackState.currentSong?.let {
-                                Uri.parse("content://media/external/audio/albumart/${it.albumId}")
+                                "content://media/external/audio/albumart/${it.albumId}".toUri()
                             },
                             isPlaying = playbackState.isPlaying,
                             progress = if (playbackState.durationMs > 0)
@@ -74,25 +84,31 @@ fun AuraNavHost(
                     }
                     AuraBottomNavigation {
                         AuraBottomNavItem(
-                            selected = currentRoute == AuraNavigationRoute.Home::class.qualifiedName,
+                            selected = currentDestination?.hasRoute<AuraNavigationRoute.Home>() == true,
                             onClick = { navigateToTopLevel(navController, AuraNavigationRoute.Home) },
                             icon = Icons.Filled.Home,
                             label = "Home"
                         )
                         AuraBottomNavItem(
-                            selected = currentRoute == AuraNavigationRoute.Library::class.qualifiedName,
+                            selected = currentDestination?.hasRoute<AuraNavigationRoute.Library>() == true,
                             onClick = { navigateToTopLevel(navController, AuraNavigationRoute.Library) },
                             icon = Icons.Filled.LibraryMusic,
                             label = "Library"
                         )
                         AuraBottomNavItem(
-                            selected = currentRoute == AuraNavigationRoute.Search::class.qualifiedName,
+                            selected = currentDestination?.hasRoute<AuraNavigationRoute.Search>() == true,
                             onClick = { navigateToTopLevel(navController, AuraNavigationRoute.Search) },
                             icon = Icons.Filled.Search,
                             label = "Search"
                         )
                         AuraBottomNavItem(
-                            selected = currentRoute == AuraNavigationRoute.Settings::class.qualifiedName,
+                            selected = currentDestination?.hasRoute<AuraNavigationRoute.Flow>() == true,
+                            onClick = { navigateToTopLevel(navController, AuraNavigationRoute.Flow) },
+                            icon = AuraIcons.Flow,
+                            label = "Flow"
+                        )
+                        AuraBottomNavItem(
+                            selected = currentDestination?.hasRoute<AuraNavigationRoute.Settings>() == true,
                             onClick = { navigateToTopLevel(navController, AuraNavigationRoute.Settings) },
                             icon = Icons.Filled.Settings,
                             label = "Settings"
@@ -107,12 +123,54 @@ fun AuraNavHost(
             startDestination = AuraNavigationRoute.Home,
             modifier = Modifier.padding(paddingValues)
         ) {
-            // PlayerRoute owns the permission launcher and library loading.
-            composable<AuraNavigationRoute.Home> { PlayerRoute() }
-            composable<AuraNavigationRoute.Library> { PlayerRoute() }
-            composable<AuraNavigationRoute.Search> { PlaceholderScreen("Search") }
-            composable<AuraNavigationRoute.Settings> { PlaceholderScreen("Settings") }
-            composable<AuraNavigationRoute.Player> { PlayerRoute() }
+            composable<AuraNavigationRoute.Home> {
+                HomeRoute(
+                    onSongClick = { song ->
+                        scope.launch {
+                            playbackRepository.send(PlaybackCommand.PlayQueue(listOf(song)))
+                            navController.navigate(AuraNavigationRoute.Player)
+                        }
+                    },
+                    onFlowClick = {
+                        navController.navigate(AuraNavigationRoute.Flow)
+                    },
+                    onViewAllClick = { category ->
+                        navController.navigate(AuraNavigationRoute.Library)
+                    },
+                    onProfileClick = {
+                        navController.navigate(AuraNavigationRoute.Settings)
+                    }
+                )
+            }
+            composable<AuraNavigationRoute.Library> {
+                LibraryRoute(
+                    onSearchClick = { navController.navigate(AuraNavigationRoute.Search) },
+                    onSongClick = { song ->
+                        scope.launch {
+                            playbackRepository.send(PlaybackCommand.PlayQueue(listOf(song)))
+                            navController.navigate(AuraNavigationRoute.Player)
+                        }
+                    },
+                    onAlbumClick = { album ->
+                        // Navigate to album detail
+                    },
+                    onArtistClick = { artist ->
+                        // Navigate to artist detail
+                    }
+                )
+            }
+            composable<AuraNavigationRoute.Search> {
+                PlaceholderScreen("Search")
+            }
+            composable<AuraNavigationRoute.Flow> {
+                FlowRoute()
+            }
+            composable<AuraNavigationRoute.Settings> {
+                SettingsRoute()
+            }
+            composable<AuraNavigationRoute.Player> {
+                PlayerRoute(onBackClick = navController::popBackStack)
+            }
         }
     }
 }
@@ -135,7 +193,7 @@ private fun PlaceholderScreen(name: String) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "$name (Coming in Stage 3.2+)",
+            text = "$name (Coming in Stage 3.x)",
             style = AuraTypography.headline,
             color = AuraColors.textPrimary
         )

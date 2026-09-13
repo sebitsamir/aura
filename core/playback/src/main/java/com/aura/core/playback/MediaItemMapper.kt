@@ -4,7 +4,9 @@ import com.aura.core.model.Song
 import com.aura.core.model.RepeatMode
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.util.UnstableApi
 
+@UnstableApi
 fun Song.toMediaItem(): MediaItem {
     return MediaItem.Builder()
         .setMediaId(id.toString())

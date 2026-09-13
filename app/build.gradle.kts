@@ -1,4 +1,4 @@
-﻿plugins {
+plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
@@ -68,7 +68,15 @@ dependencies {
     implementation(project(":data:repository"))
     implementation(project(":domain:playback"))
     implementation(project(":core:playback"))
+
+    // Feature Modules
+    implementation(project(":feature:home"))
+    implementation(project(":feature:library"))
+    implementation(project(":feature:search"))
+    implementation(project(":feature:flow"))
+    implementation(project(":feature:settings"))
     implementation(project(":feature:player"))
+
     implementation(project(":service:playback"))
 
     implementation(libs.androidx.core.ktx)

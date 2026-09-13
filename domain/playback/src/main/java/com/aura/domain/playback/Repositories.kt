@@ -7,6 +7,7 @@ import com.aura.core.model.Genre
 import com.aura.core.model.Song
 import com.aura.core.playback.PlaybackCommand
 import com.aura.core.playback.PlaybackUiState
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 // Repository for library data.
@@ -34,6 +35,8 @@ interface LibraryRepository {
     suspend fun getSongsByFolder(folderPath: String): List<Song>
     
     suspend fun getAlbumsByArtist(artistUuid: String): List<Album>
+
+    fun getRecentlyPlayed(limit: Int): Flow<List<Song>>
 }
 
 // Repository for playback state and commands.

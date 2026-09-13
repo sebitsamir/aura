@@ -35,3 +35,4 @@ out/
 secrets.properties
 keystore.properties
 google-services.json
+/assets/

@@ -1,26 +1,28 @@
 package com.aura.feature.player
 
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -28,349 +30,227 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aura.core.designsystem.components.AuraArtwork
+import com.aura.core.designsystem.components.AuraBrandMark
+import com.aura.core.designsystem.components.AuraEmptyState
+import com.aura.core.designsystem.theme.AuraColors
+import com.aura.core.designsystem.theme.AuraShape
+import com.aura.core.designsystem.theme.AuraSpacing
+import com.aura.core.designsystem.theme.AuraTypography
 import com.aura.core.model.RepeatMode
+import com.aura.core.playback.PlaybackUiState
 import kotlin.math.max
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerRoute(
+    onBackClick: () -> Unit,
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions(),
-    ) { result ->
-        val granted = result.values.all { it }
-        viewModel.onPermissionResult(granted)
-    }
-
-    val requestPermissions: () -> Unit = {
-        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(Manifest.permission.READ_MEDIA_AUDIO)
-        } else {
-            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-        permissionLauncher.launch(permissions)
-    }
-
-    PlayerScreen(
-        uiState = uiState,
-        onEvent = viewModel::onEvent,
-        onRequestPermission = requestPermissions,
-    )
+    PlayerScreen(uiState, viewModel::onEvent, onBackClick)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
     uiState: PlayerScreenUiState,
     onEvent: (PlayerScreenEvent) -> Unit,
-    onRequestPermission: () -> Unit,
-) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("AURA") },
-            )
-        },
-        bottomBar = {
-            NowPlayingBar(
-                uiState = uiState,
-                onEvent = onEvent,
-            )
-        },
-    ) { padding ->
-        when {
-            !uiState.hasAudioPermission -> {
-                PermissionContent(
-                    modifier = Modifier.padding(padding),
-                    onRequestPermission = onRequestPermission,
-                )
-            }
-            uiState.isLoadingLibrary -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-            uiState.libraryError != null -> {
-                ErrorContent(
-                    modifier = Modifier.padding(padding),
-                    message = uiState.libraryError,
-                    onRetry = { onEvent(PlayerScreenEvent.RefreshLibrary) },
-                )
-            }
-            else -> {
-                SongList(
-                    modifier = Modifier.padding(padding),
-                    songs = uiState.songs,
-                    currentSongId = uiState.playback.currentSong?.id,
-                    onSongClick = { index -> onEvent(PlayerScreenEvent.PlaySong(index)) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PermissionContent(
-    modifier: Modifier = Modifier,
-    onRequestPermission: () -> Unit,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-            contentDescription = null,
-            modifier = Modifier.size(72.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "Let AURA find your music",
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "AURA needs access to your audio library so it can organize and play your music. Your music stays on your device.",
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onRequestPermission) {
-            Text("Allow access")
-        }
-    }
-}
-
-@Composable
-private fun ErrorContent(
-    modifier: Modifier = Modifier,
-    message: String,
-    onRetry: () -> Unit,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(text = message, style = MaterialTheme.typography.bodyLarge)
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onRetry) {
-            Text("Try again")
-        }
-    }
-}
-
-@Composable
-private fun SongList(
-    modifier: Modifier = Modifier,
-    songs: List<com.aura.core.model.Song>,
-    currentSongId: Long?,
-    onSongClick: (Int) -> Unit,
-) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        itemsIndexed(songs, key = { _, song -> song.id }) { index, song ->
-            val isPlaying = song.id == currentSongId
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSongClick(index) }
-                    .padding(vertical = 12.dp)
-                    .semantics {
-                        contentDescription = "Play ${song.title} by ${song.artist}"
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MusicNote,
-                    contentDescription = null,
-                    tint = if (isPlaying) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-                Column(
-                    modifier = Modifier
-                        .padding(start = 16.dp)
-                        .weight(1f),
-                ) {
-                    Text(
-                        text = song.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = if (isPlaying) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    )
-                    Text(
-                        text = "${song.artist} • ${song.album}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    text = formatDuration(song.durationMs),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NowPlayingBar(
-    uiState: PlayerScreenUiState,
-    onEvent: (PlayerScreenEvent) -> Unit,
+    onBackClick: () -> Unit,
 ) {
     val playback = uiState.playback
-    val currentSong = playback.currentSong ?: return
+    val song = playback.currentSong
+    if (song == null) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(AuraColors.background),
+            contentAlignment = Alignment.Center,
+        ) {
+            AuraEmptyState(
+                title = "Nothing playing",
+                message = "Choose a song from Home or Library to begin.",
+                actionLabel = "Go back",
+                onAction = onBackClick,
+            )
+        }
+        return
+    }
 
+    val duration = max(playback.durationMs, 1L)
+    val artworkUri = "content://media/external/audio/albumart/${song.albumId}".toUri()
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .fillMaxSize()
+            .background(AuraColors.background)
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = AuraSpacing.lg),
     ) {
-        Text(
-            text = currentSong.title,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = currentSong.artist,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        val duration = max(playback.durationMs, 1L)
-        val progress = (playback.positionMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-        LinearProgressIndicator(
-            progress = { progress },
+        PlayerHeader(onBackClick)
+        Box(Modifier.fillMaxWidth().height(1.dp).background(AuraColors.auraRed))
+        AuraArtwork(
+            artworkUri = artworkUri,
+            contentDescription = "${song.album} artwork",
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(horizontal = AuraSpacing.lg, vertical = AuraSpacing.lg)
+                .aspectRatio(1f),
+            shape = AuraShape.artwork,
         )
-        Slider(
-            value = playback.positionMs.toFloat(),
-            onValueChange = { onEvent(PlayerScreenEvent.SeekTo(it.toLong())) },
-            valueRange = 0f..duration.toFloat(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = "${formatDuration(playback.positionMs)} / ${formatDuration(playback.durationMs)}",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = AuraSpacing.lg),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                onClick = { onEvent(PlayerScreenEvent.ToggleShuffle) },
-                modifier = Modifier.semantics {
-                    contentDescription = if (playback.shuffleEnabled) "Disable shuffle" else "Enable shuffle"
-                },
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Shuffle,
-                    contentDescription = null,
-                    tint = if (playback.shuffleEnabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+            Column(Modifier.weight(1f)) {
+                Text(
+                    song.title,
+                    style = AuraTypography.display.copy(fontSize = 30.sp, lineHeight = 36.sp),
+                    color = AuraColors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(song.artist, style = AuraTypography.body, color = AuraColors.textSecondary, maxLines = 1)
+                Text(
+                    song.album,
+                    style = AuraTypography.body.copy(fontFamily = FontFamily.Serif),
+                    color = AuraColors.textMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            IconButton(onClick = { onEvent(PlayerScreenEvent.Previous) }) {
-                Icon(Icons.Default.SkipPrevious, contentDescription = "Previous")
-            }
-            IconButton(
-                onClick = { onEvent(PlayerScreenEvent.TogglePlayPause) },
-                modifier = Modifier.size(56.dp),
-            ) {
-                Icon(
-                    imageVector = if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (playback.isPlaying) "Pause" else "Play",
-                    modifier = Modifier.size(40.dp),
-                )
-            }
-            IconButton(onClick = { onEvent(PlayerScreenEvent.Next) }) {
-                Icon(Icons.Default.SkipNext, contentDescription = "Next")
-            }
-            IconButton(
-                onClick = { onEvent(PlayerScreenEvent.CycleRepeatMode) },
-                modifier = Modifier.semantics {
-                    contentDescription = playback.repeatMode.label()
-                },
-            ) {
-                Icon(
-                    imageVector = when (playback.repeatMode) {
-                        RepeatMode.ONE -> Icons.Default.RepeatOne
-                        RepeatMode.ALL, RepeatMode.OFF -> Icons.Default.Repeat
-                    },
-                    contentDescription = null,
-                    tint = if (playback.repeatMode == RepeatMode.OFF) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
-                )
-            }
+            Icon(
+                Icons.Default.FavoriteBorder,
+                contentDescription = "Favorites arrive in phase 5",
+                tint = AuraColors.textMuted,
+                modifier = Modifier.size(34.dp),
+            )
+        }
+        Spacer(Modifier.height(AuraSpacing.md))
+        Slider(
+            value = playback.positionMs.toFloat().coerceIn(0f, duration.toFloat()),
+            onValueChange = { onEvent(PlayerScreenEvent.SeekTo(it.toLong())) },
+            valueRange = 0f..duration.toFloat(),
+            modifier = Modifier.padding(horizontal = AuraSpacing.lg),
+            colors = SliderDefaults.colors(
+                thumbColor = AuraColors.textPrimary,
+                activeTrackColor = AuraColors.auraRed,
+                inactiveTrackColor = AuraColors.borderSubtle,
+            ),
+        )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = AuraSpacing.lg),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(formatDuration(playback.positionMs), style = AuraTypography.metadata, color = AuraColors.textSecondary)
+            Text("-${formatDuration((duration - playback.positionMs).coerceAtLeast(0))}", style = AuraTypography.metadata, color = AuraColors.textSecondary)
+        }
+        Spacer(Modifier.height(AuraSpacing.lg))
+        PlaybackControls(playback, onEvent)
+        Spacer(Modifier.height(AuraSpacing.xl))
+        PlayerDestinations()
+    }
+}
+
+@Composable
+private fun PlayerHeader(onBackClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = AuraSpacing.sm, vertical = AuraSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        IconButton(onClick = onBackClick) {
+            Icon(Icons.Default.KeyboardArrowDown, "Close player", tint = AuraColors.textPrimary)
+        }
+        AuraBrandMark(Modifier.size(64.dp), "AURA")
+        Icon(Icons.Default.MoreVert, "Options arrive with the player phase", tint = AuraColors.textMuted)
+    }
+}
+
+@Composable
+private fun PlaybackControls(playback: PlaybackUiState, onEvent: (PlayerScreenEvent) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = AuraSpacing.base),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlayerControl(Icons.Default.Shuffle, "Shuffle", playback.shuffleEnabled) {
+            onEvent(PlayerScreenEvent.ToggleShuffle)
+        }
+        PlayerControl(Icons.Default.SkipPrevious, "Previous") { onEvent(PlayerScreenEvent.Previous) }
+        IconButton(
+            onClick = { onEvent(PlayerScreenEvent.TogglePlayPause) },
+            modifier = Modifier.size(76.dp).background(AuraColors.surfaceElevated, CircleShape),
+        ) {
+            Icon(
+                if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                if (playback.isPlaying) "Pause" else "Play",
+                tint = AuraColors.textPrimary,
+                modifier = Modifier.size(42.dp),
+            )
+        }
+        PlayerControl(Icons.Default.SkipNext, "Next") { onEvent(PlayerScreenEvent.Next) }
+        PlayerControl(
+            if (playback.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+            playback.repeatMode.label(),
+            playback.repeatMode != RepeatMode.OFF,
+        ) { onEvent(PlayerScreenEvent.CycleRepeatMode) }
+    }
+}
+
+@Composable
+private fun PlayerControl(
+    icon: ImageVector,
+    description: String,
+    active: Boolean = false,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick) {
+        Icon(icon, description, tint = if (active) AuraColors.auraRed else AuraColors.textPrimary)
+    }
+}
+
+@Composable
+private fun PlayerDestinations() {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = AuraSpacing.lg),
+        horizontalArrangement = Arrangement.spacedBy(AuraSpacing.sm),
+    ) {
+        PlayerDestination(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.weight(1f))
+        PlayerDestination(Icons.Default.Lyrics, "Lyrics", Modifier.weight(1f))
+        PlayerDestination(Icons.Default.Equalizer, "Audio", Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun PlayerDestination(icon: ImageVector, label: String, modifier: Modifier) {
+    OutlinedButton(
+        onClick = { },
+        enabled = false,
+        modifier = modifier,
+        border = BorderStroke(1.dp, AuraColors.borderSubtle),
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, null, modifier = Modifier.size(20.dp))
+            Text(label, style = AuraTypography.metadata)
         }
     }
 }
 
 private fun formatDuration(durationMs: Long): String {
-    val totalSeconds = (durationMs / 1000).coerceAtLeast(0)
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
+    val seconds = (durationMs / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(seconds / 60, seconds % 60)
 }

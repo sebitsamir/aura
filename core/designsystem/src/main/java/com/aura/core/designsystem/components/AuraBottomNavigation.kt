@@ -40,12 +40,12 @@ fun RowScope.AuraBottomNavItem(
         selected = selected,
         onClick = onClick,
         icon = { Icon(imageVector = icon, contentDescription = label) },
-        label = { 
+        label = {
             Text(
-                text = label.uppercase(),
-                style = AuraTypography.label,
+                text = label,
+                style = AuraTypography.metadata,
                 maxLines = 1
-            ) 
+            )
         },
         colors = NavigationBarItemDefaults.colors(
             selectedIconColor = AuraColors.auraRed,

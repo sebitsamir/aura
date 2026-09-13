@@ -11,13 +11,11 @@ import com.aura.core.model.Genre
 import com.aura.core.model.Song
 import com.aura.core.scanner.MediaStoreTrackScanner
 import com.aura.domain.playback.LibraryRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// Library repository implementation.
-// Reads from Room after a scan.
-// Playback recovery remains protected by the MediaStore fallback
-// until the Room library is populated.
 @Singleton
 class LibraryRepositoryImpl @Inject constructor(
     private val database: AuraDatabase,
@@ -32,28 +30,16 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getSongsByIds(ids: List<Long>): List<Song> {
-        if (ids.isEmpty()) {
-            return emptyList()
-        }
-
-        val roomSongs = database.trackDao()
+        if (ids.isEmpty()) return emptyList()
+        return database.trackDao()
             .getAvailableByMediaStoreIds(ids)
             .map { track -> track.toSong() }
-
-        if (roomSongs.isNotEmpty()) {
-            return roomSongs
-        }
-
-        return emptyList()
     }
 
     override suspend fun getAlbums(): List<Album> {
         ensureLibraryIsScanned()
-        val albums = database.albumDao().getAvailableAlbums()
-        return albums.map { album ->
-            val trackCount = database.albumDao()
-                .getTracksForAlbum(album.mediaStoreAlbumId)
-                .size
+        return database.albumDao().getAvailableAlbums().map { album ->
+            val trackCount = database.albumDao().getTracksForAlbum(album.mediaStoreAlbumId).size
             Album(
                 albumUuid = album.albumUuid,
                 name = album.name,
@@ -67,8 +53,7 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun getArtists(): List<Artist> {
         ensureLibraryIsScanned()
-        val artists = database.artistDao().getAvailableArtists()
-        return artists.map { artist ->
+        return database.artistDao().getAvailableArtists().map { artist ->
             val tracks = database.artistDao().getTracksForArtist(artist.artistUuid)
             val albums = database.albumDao().getAlbumsForArtist(artist.artistUuid)
             Artist(
@@ -82,8 +67,7 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun getGenres(): List<Genre> {
         ensureLibraryIsScanned()
-        val genres = database.genreDao().getAvailableGenres()
-        return genres.map { genre ->
+        return database.genreDao().getAvailableGenres().map { genre ->
             val tracks = database.genreDao().getTracksForGenre(genre.genreUuid)
             Genre(
                 genreUuid = genre.genreUuid,
@@ -95,8 +79,7 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun getFolders(): List<Folder> {
         ensureLibraryIsScanned()
-        val folders = database.folderDao().getAvailableFolders()
-        return folders.map { folder ->
+        return database.folderDao().getAvailableFolders().map { folder ->
             val trackCount = database.folderDao().getTrackCountForFolder(folder.path)
             Folder(
                 folderUuid = folder.folderUuid,
@@ -110,39 +93,28 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun getSongsByAlbum(mediaStoreAlbumId: Long): List<Song> {
         ensureLibraryIsScanned()
-        return database.albumDao()
-            .getTracksForAlbum(mediaStoreAlbumId)
-            .map { track -> track.toSong() }
+        return database.albumDao().getTracksForAlbum(mediaStoreAlbumId).map { it.toSong() }
     }
 
     override suspend fun getSongsByArtist(artistUuid: String): List<Song> {
         ensureLibraryIsScanned()
-        return database.artistDao()
-            .getTracksForArtist(artistUuid)
-            .map { track -> track.toSong() }
+        return database.artistDao().getTracksForArtist(artistUuid).map { it.toSong() }
     }
 
     override suspend fun getSongsByGenre(genreUuid: String): List<Song> {
         ensureLibraryIsScanned()
-        return database.genreDao()
-            .getTracksForGenre(genreUuid)
-            .map { track -> track.toSong() }
+        return database.genreDao().getTracksForGenre(genreUuid).map { it.toSong() }
     }
 
     override suspend fun getSongsByFolder(folderPath: String): List<Song> {
         ensureLibraryIsScanned()
-        return database.folderDao()
-            .getTracksForFolder(folderPath)
-            .map { track -> track.toSong() }
+        return database.folderDao().getTracksForFolder(folderPath).map { it.toSong() }
     }
 
     override suspend fun getAlbumsByArtist(artistUuid: String): List<Album> {
         ensureLibraryIsScanned()
-        val albums = database.albumDao().getAlbumsForArtist(artistUuid)
-        return albums.map { album ->
-            val trackCount = database.albumDao()
-                .getTracksForAlbum(album.mediaStoreAlbumId)
-                .size
+        return database.albumDao().getAlbumsForArtist(artistUuid).map { album ->
+            val trackCount = database.albumDao().getTracksForAlbum(album.mediaStoreAlbumId).size
             Album(
                 albumUuid = album.albumUuid,
                 name = album.name,
@@ -154,22 +126,20 @@ class LibraryRepositoryImpl @Inject constructor(
         }
     }
 
-    // Ensures that the first library access performs a scan when needed.
-    private suspend fun ensureLibraryIsScanned() {
-        val hasTracks = database.trackDao().availableTrackCount() > 0
-        if (hasTracks) {
-            return
-        }
-
-        val latestRevision = database.scanRevisionDao().getLatest()
-        val needsScan = latestRevision == null || latestRevision.status != ScanStatus.COMPLETED
-
-        if (needsScan) {
-            scanner.fullScan()
-        }
+    override fun getRecentlyPlayed(limit: Int): Flow<List<Song>> {
+        return database.playbackEventDao()
+            .getRecentlyPlayedTracks(limit)
+            .map { tracks -> tracks.map { it.toSong() } }
     }
 
-    // Maps the durable Room track source into the playback-facing Song model.
+    private suspend fun ensureLibraryIsScanned() {
+        val hasTracks = database.trackDao().availableTrackCount() > 0
+        if (hasTracks) return
+        val latestRevision = database.scanRevisionDao().getLatest()
+        val needsScan = latestRevision == null || latestRevision.status != ScanStatus.COMPLETED
+        if (needsScan) scanner.fullScan()
+    }
+
     private fun TrackEntity.toSong(): Song {
         return Song(
             id = mediaStoreId,
